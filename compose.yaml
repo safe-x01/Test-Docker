@@ -1,0 +1,235 @@
+name: indoor-incident-system
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: indoor-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend_network
+
+  emqx:
+    image: emqx/emqx:6.3.2
+    container_name: indoor-emqx
+    hostname: node1.emqx.com
+    restart: unless-stopped
+    environment:
+      EMQX_NODE_NAME: emqx@node1.emqx.com
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+      - "18183:18083"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 5s
+      timeout: 25s
+      retries: 5
+    networks:
+      - iot_network
+
+  migrate:
+    build:
+      context: ./services/backend
+    container_name: indoor-migrate
+    command: alembic upgrade head
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend_network
+    restart: "no"
+
+  seed:
+    build:
+      context: ./services/backend
+    container_name: indoor-seed
+    command: python -m app.seed_demo
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend_network
+    restart: "no"
+
+  deepcraft-adapter:
+    build:
+      context: ./services/deepcraft_adapter
+    container_name: indoor-deepcraft-adapter
+    restart: unless-stopped
+    environment:
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      RAW_TOPIC: safe-x/v1/nodes/+/telemetry
+      OUTPUT_TOPIC: safe-x/v1/adapter/events
+      PRE_FIRE_THRESHOLD: 0.55
+      FIRE_THRESHOLD: 0.80
+    depends_on:
+      emqx:
+        condition: service_healthy
+    networks:
+      - iot_network
+
+  backend:
+    build:
+      context: ./services/backend
+    container_name: indoor-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      ADAPTER_EVENT_TOPIC: safe-x/v1/adapter/events
+      JWT_SECRET: ${JWT_SECRET}
+      EVIDENCE_PATH: /data/evidence
+    volumes:
+      - evidence_data:/data/evidence
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      emqx:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend_network
+      - iot_network
+
+  notifier:
+    build:
+      context: ./services/backend
+    container_name: indoor-notifier
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.notification_worker"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend_network
+
+  esp32-mock:
+    build:
+      context: ./services/esp32_mock
+    container_name: indoor-esp32-mock
+    restart: unless-stopped
+    profiles:
+      - mock
+    environment:
+      MQTT_HOST: emqx
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      DEVICE_CODE: esp32-node-01
+      ZONE_CODE: room-a1
+      MODEL_VERSION: deepcraft-fire-demo-v1
+      PUBLISH_TOPIC: safe-x/v1/nodes/esp32-node-01/telemetry
+      MOCK_INTERVAL_SECONDS: 30
+      MOCK_SCENARIO: cycle
+    depends_on:
+      emqx:
+        condition: service_healthy
+    networks:
+      - iot_network
+
+  adminer:
+    image: adminer:4
+    container_name: indoor-adminer
+    profiles:
+      - dev
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend_network
+  
+  # node-red:
+  #   image: nodered/node-red:5.0.9-24
+  #   container_name: indoor-node-red
+  #   restart: unless-stopped
+
+  #   environment:
+  #     TZ: Asia/Bangkok
+  #     NODE_RED_ADMIN_USER: ${NODE_RED_ADMIN_USER}
+  #     NODE_RED_ADMIN_PASSWORD_HASH: ${NODE_RED_ADMIN_PASSWORD_HASH}
+  #     NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET}
+
+  #   ports:
+  #     - "127.0.0.1:1880:1880"
+
+  #   volumes:
+  #     - node_red_data:/data
+  #     - ./infra/node-red/settings.js:/data/settings.js:ro
+
+  #   depends_on:
+  #     emqx:
+  #       condition: service_healthy
+
+  #   networks:
+  #     - iot_network
+
+networks:
+  backend_network:
+    driver: bridge
+  iot_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  emqx_data:
+  emqx_log:
+  evidence_data:
+  # node_red_data:
