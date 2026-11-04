@@ -1,6 +1,6 @@
 # SAFE-X mock stack — DB dictionary aligned + EMQX
 
-This local test stack aligns its PostgreSQL schema to `safealert_database_data_dictionary(2).json` and keeps the existing mock flow:
+This local test stack aligns its PostgreSQL schema to `safealert_database_data_dictionary.json` and keeps the existing mock flow:
 
 `esp32-mock -> EMQX -> deepcraft-adapter -> backend -> PostgreSQL -> notifier`
 
