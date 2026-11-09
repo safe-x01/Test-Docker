@@ -165,7 +165,7 @@ class IncidentEvidence(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     incident_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("INCIDENT.id"))
     media_kind: Mapped[str | None] = mapped_column(String)
-    local_path: Mapped[str | None] = mapped_column(String)
+    storage_path: Mapped[str | None] = mapped_column(String)
     is_exportable: Mapped[bool | None] = mapped_column(Boolean)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -184,6 +184,25 @@ class Report(Base):
     reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     seq: Mapped[int | None] = mapped_column(BigInteger)
+
+
+class ReportAttachment(Base):
+    __tablename__ = "REPORT_ATTACHMENT"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    report_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("REPORT.id"),
+    )
+    media_kind: Mapped[str | None] = mapped_column(String)
+    storage_path: Mapped[str | None] = mapped_column(String)
+    captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
 
 class Acknowledgement(Base):
