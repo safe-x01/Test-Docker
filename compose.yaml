@@ -196,30 +196,30 @@ services:
     networks:
       - backend_network
   
-  # node-red:
-  #   image: nodered/node-red:5.0.9-24
-  #   container_name: indoor-node-red
-  #   restart: unless-stopped
+  node-red:
+    image: nodered/node-red:latest
+    container_name: indoor-node-red
+    restart: unless-stopped
 
-  #   environment:
-  #     TZ: Asia/Bangkok
-  #     NODE_RED_ADMIN_USER: ${NODE_RED_ADMIN_USER}
-  #     NODE_RED_ADMIN_PASSWORD_HASH: ${NODE_RED_ADMIN_PASSWORD_HASH}
-  #     NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET}
+    environment:
+      TZ: Asia/Bangkok
+      NODE_RED_ADMIN_USER: ${NODE_RED_ADMIN_USER}
+      NODE_RED_ADMIN_PASSWORD_HASH: ${NODE_RED_ADMIN_PASSWORD_HASH}
+      NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET}
 
-  #   ports:
-  #     - "127.0.0.1:1880:1880"
+    ports:
+      - "127.0.0.1:1880:1880"
 
-  #   volumes:
-  #     - node_red_data:/data
-  #     - ./infra/node-red/settings.js:/data/settings.js:ro
+    volumes:
+      - node_red_data:/data
+      - ./infra/node-red/settings.js:/data/settings.js:ro
 
-  #   depends_on:
-  #     emqx:
-  #       condition: service_healthy
+    depends_on:
+      emqx:
+        condition: service_healthy
 
-  #   networks:
-  #     - iot_network
+    networks:
+      - iot_network
 
 networks:
   backend_network:
@@ -232,4 +232,4 @@ volumes:
   emqx_data:
   emqx_log:
   evidence_data:
-  # node_red_data:
+  node_red_data:

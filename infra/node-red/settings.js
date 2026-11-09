@@ -1,4 +1,17 @@
 
+const requiredEnv = [
+    "NODE_RED_ADMIN_USER",
+    "NODE_RED_ADMIN_PASSWORD_HASH",
+    "NODE_RED_CREDENTIAL_SECRET"
+];
+
+for (const key of requiredEnv) {
+    if (!process.env[key]) {
+        throw new Error(`Missing required environment variable: ${key}`);
+    }
+}
+
+
 module.exports = {
     // Server configuration
     uiPort: process.env.PORT || 1880,
